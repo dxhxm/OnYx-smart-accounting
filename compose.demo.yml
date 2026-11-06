@@ -1,0 +1,65 @@
+# =============================================================================
+# OnYx Smart Accounting — Local Demo Multi-Container Setup
+# =============================================================================
+# Usage:
+#   docker compose -f compose.demo.yml up -d --build
+#   docker compose -f compose.demo.yml down -v (to teardown)
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Database: PostgreSQL 16 (Alpine)
+  # Isolated within internal Docker network, data persisted in named volume
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: onyx-demo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: onyx
+      POSTGRES_PASSWORD: onyx_local_secret_password
+      POSTGRES_DB: onyx_demo
+    # Security: bind port ONLY to localhost (127.0.0.1) so it is not exposed publicly
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - onyx_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onyx -d onyx_demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Application: OnYx Next.js App
+  # Runs hardened standalone image, waits for DB readiness before starting
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: onyx-demo-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://onyx:onyx_local_secret_password@db:5432/onyx_demo?sslmode=disable"
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - onyx_network
+
+volumes:
+  postgres_data:
+    name: onyx_demo_postgres_data
+
+networks:
+  onyx_network:
+    name: onyx_demo_network
+    driver: bridge
+
