@@ -1,17 +1,20 @@
-name: PR Continuous Integration
+name: Continuous Integration
 
 on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
 
-# Least privilege: PR workflows only need read access to repository contents
+# Least privilege: CI workflow only needs read access to repository contents
 permissions:
   contents: read
 
-# Automatically cancel out-of-date runs when new commits are pushed to the same PR
+# Automatically cancel out-of-date runs when new commits are pushed
 concurrency:
-  group: pr-ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
