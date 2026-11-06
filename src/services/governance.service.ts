@@ -2,10 +2,10 @@ import { db as prisma } from "../lib/db";
 import { Prisma } from "@prisma/client";
 import { HttpError } from "../utils/httpError"; // if you don't have HttpError export, tell me
 
-function isValidMonth(month: string) {
+export function isValidMonth(month: string) {
   return /^\d{4}-\d{2}$/.test(month);
 }
-function isValidDate(date: string) {
+export function isValidDate(date: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(date);
 }
 
@@ -22,7 +22,7 @@ function monthEndUTC(yyyy_mm: string) {
   return new Date(Date.UTC(y, m, 1)); // first day next month
 }
 
-function computeStatus(limit: number, spending: number) {
+export function computeStatus(limit: number, spending: number) {
   if (limit <= 0) return { status: "BLUE" as const, blocked: false, usedPercent: 0, remaining: 0 };
   const usedPercent = (spending / limit) * 100;
   const remaining = Math.max(0, limit - spending);

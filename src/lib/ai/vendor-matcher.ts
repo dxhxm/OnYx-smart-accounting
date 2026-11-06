@@ -244,7 +244,7 @@ export async function matchVendor(
 }
 
 // Helper: Levenshtein Distance
-function levenshteinDistance(a: string, b: string): number {
+export function levenshteinDistance(a: string, b: string): number {
     const matrix: number[][] = [];
 
     for (let i = 0; i <= b.length; i++) {

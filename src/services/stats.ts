@@ -26,7 +26,7 @@ function dayBoundsInTZ(timeZone: string, baseDate = new Date()) {
   return { start, end };
 }
 
-function extractConfidenceAvg(confidenceScores: unknown): number | null {
+export function extractConfidenceAvg(confidenceScores: unknown): number | null {
   const root = asObject(confidenceScores);
   if (!root) return null;
 
