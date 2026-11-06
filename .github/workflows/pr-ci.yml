@@ -47,7 +47,61 @@ jobs:
         run: npm run test:ci
 
   # ===========================================================================
-  # 2. Production Build Verification
+  # 2. Database Migrations & Integration Gate
+  # Spawns an ephemeral PostgreSQL service container to verify migrations
+  # and seed scripts on a clean database without exposing any real credentials
+  # ===========================================================================
+  database-and-migrations:
+    name: Database Migrations & Seed Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: onyx_test
+          POSTGRES_PASSWORD: onyx_test_password
+          POSTGRES_DB: onyx_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://onyx_test:onyx_test_password@localhost:5432/onyx_test_db?sslmode=disable"
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply Database Migrations (prisma migrate deploy)
+        run: npx prisma migrate deploy
+
+      - name: Verify Migration Status (prisma migrate status)
+        run: npx prisma migrate status
+
+      - name: Verify Database Seed (prisma db seed)
+        run: npx prisma db seed
+
+  # ===========================================================================
+  # 3. Production Build Verification
   # Verifies that Next.js standalone build compiles cleanly
   # ===========================================================================
   build-verification:
