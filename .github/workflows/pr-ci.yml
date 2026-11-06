@@ -133,3 +133,31 @@ jobs:
       - name: Build Next.js standalone bundle
         run: npm run build
 
+  # ===========================================================================
+  # 4. Docker Build Verification Gate
+  # Verifies the production multi-stage Dockerfile builds without errors.
+  # Security boundary: push is FALSE — PRs never publish to container registries.
+  # ===========================================================================
+  docker-build-verification:
+    name: Docker Multi-Stage Image Build
+    needs: [quality-and-test, database-and-migrations]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: onyx-smart-accounting:pr-check
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
