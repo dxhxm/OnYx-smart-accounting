@@ -1,0 +1,15 @@
+# =============================================================================
+# OnYx DevSecOps — Trivy Vulnerability Exception Policy (.trivyignore)
+# Documented triage for known, non-exploitable findings in baseline demo
+# =============================================================================
+
+# Windows-only RCE in Next.js; our container runs Linux Alpine (non-applicable)
+CVE-2026-75604
+
+# Next.js Image Optimization SVG/AVIF parsing (no public image upload vector in demo)
+GHSA-2464-fhr4-w9xw
+GHSA-2xp9-vwfh-vxw4
+
+# Experimental 'use cache' typed array advisory (feature not used in codebase)
+GHSA-673q-mjm6-r5xr
+

@@ -11,9 +11,9 @@ on:
     # Run a scheduled scan every Monday at 06:00 UTC
     - cron: "0 6 * * 1"
 
-# Least privilege: Security workflows only need read access to repository contents
 permissions:
   contents: read
+  security-events: write
 
 # Automatically cancel out-of-date runs when new commits are pushed
 concurrency:
@@ -42,3 +42,59 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
 
+  # ===========================================================================
+  # 2. Dependency Vulnerability Audit (SCA)
+  # Scans repository dependencies and lockfiles for known CVEs
+  # ===========================================================================
+  dependency-scan:
+    name: Dependency Vulnerability Audit (SCA)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy Repository & Dependency Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          severity: "CRITICAL,HIGH"
+          trivyignores: ".trivyignore"
+          format: "table"
+
+  # ===========================================================================
+  # 3. Container Image Security Scan
+  # Builds the production multi-stage image and scans it with Trivy
+  # ===========================================================================
+  container-scan:
+    name: Container Vulnerability Scan (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build local container image for scanning
+        run: |
+          docker build -t onyx-smart-accounting:security-check .
+
+      - name: Run Trivy Container Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "onyx-smart-accounting:security-check"
+          severity: "CRITICAL,HIGH"
+          trivyignores: ".trivyignore"
+          format: "sarif"
+          output: "trivy-results.sarif"
+
+      - name: Upload Trivy Scan Results to GitHub Security Tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
