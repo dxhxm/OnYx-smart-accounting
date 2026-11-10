@@ -31,6 +31,15 @@ resource "aws_security_group" "demo_server" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # Inbound: Allow standard HTTPS (port 443)
+  ingress {
+    description = "Allow inbound HTTPS"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # SECURITY BOUNDARY:
   # Notice: NO port 22 (SSH) allowed from internet! Management via AWS Systems Manager.
   # Notice: NO port 5432 (Postgres) allowed from internet! Database is internal only.

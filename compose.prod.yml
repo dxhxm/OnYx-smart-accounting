@@ -50,9 +50,32 @@ services:
     networks:
       - onyx_network
 
+  # ---------------------------------------------------------------------------
+  # Reverse Proxy: Caddy (Automatic HTTPS, SSL Termination & Edge Routing)
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: onyx-prod-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    networks:
+      - onyx_network
+
 volumes:
   postgres_data:
     name: onyx_prod_postgres_data
+  caddy_data:
+    name: onyx_prod_caddy_data
+  caddy_config:
+    name: onyx_prod_caddy_config
 
 networks:
   onyx_network:

@@ -1,0 +1,14 @@
+{
+    admin off
+}
+
+# Production Domain Routing (Cloudflare Full SSL)
+onyx-smart-accounting.app, www.onyx-smart-accounting.app {
+    tls internal
+    reverse_proxy app:3000
+}
+
+# Catch-all HTTP fallback (Cloudflare Flexible SSL / Direct IP)
+:80 {
+    reverse_proxy app:3000
+}

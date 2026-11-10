@@ -119,6 +119,7 @@ jobs:
           echo "Preparing deployment assets payload..."
           COMPOSE_B64=$(base64 -i compose.prod.yml | tr -d '\n')
           DEPLOY_SCRIPT_B64=$(base64 -i scripts/deploy-demo.sh | tr -d '\n')
+          CADDYFILE_B64=$(base64 -i Caddyfile | tr -d '\n')
 
           echo "Sending deployment command to instance ${INSTANCE_ID} via AWS SSM..."
           COMMAND_ID=$(aws ssm send-command \
@@ -128,6 +129,7 @@ jobs:
             --parameters commands="[
               \"mkdir -p /opt/onyx/scripts\",
               \"echo '${COMPOSE_B64}' | base64 -d > /opt/onyx/compose.prod.yml\",
+              \"echo '${CADDYFILE_B64}' | base64 -d > /opt/onyx/Caddyfile\",
               \"echo '${DEPLOY_SCRIPT_B64}' | base64 -d > /opt/onyx/scripts/deploy-demo.sh\",
               \"chmod +x /opt/onyx/scripts/deploy-demo.sh\",
               \"/opt/onyx/scripts/deploy-demo.sh '${IMAGE_URI}'\"
@@ -216,6 +218,7 @@ jobs:
           echo "### 🌐 Production Deployment Summary" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Custom Domain (HTTPS)** | [https://onyx-smart-accounting.app](https://onyx-smart-accounting.app) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Target Server** | \`${INSTANCE_ID}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Public IPv4** | \`${PUBLIC_IP}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Direct Application URL** | [${APP_URL}](${APP_URL}) |" >> $GITHUB_STEP_SUMMARY
