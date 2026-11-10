@@ -71,9 +71,10 @@ In a mature DevSecOps pipeline, false positives and non-exploitable findings are
 | `GHSA-f88m-g3jw-g9cj` | `sharp@0.34.5` | Triaged | Vulnerabilities in `libvips` parser bundled in sharp; no image processing in demo. |
 | `GHSA-rgj7-g3m4-5g8c` | `sharp@0.34.5` | Triaged | Vulnerabilities in `libheif` parser bundled in sharp; no image processing in demo. |
 | `GHSA-673q-mjm6-r5xr` | `next@16.1.6` | Triaged | Pertains to experimental `use cache` returning typed arrays; unused in codebase. |
-| `CVE-2026-109383` | `undici@6.28.0` | Remediated & Triaged | Stripped `npm` and bundled `undici` from production runner; no outbound SSRF vector in OnYx. |
-| `CVE-2026-109869` | `undici@6.28.0` | Remediated & Triaged | Stripped `npm` and bundled `undici` from production runner; no outbound SSRF vector in OnYx. |
-| `CVE-2026-87018` | `undici@6.28.0` | Remediated & Triaged | Stripped `npm` and bundled `undici` from production runner; no outbound SSRF vector in OnYx. |
+| `GHSA-8h8q-6873-q5fj` / `GHSA-q4gf-8mx6-v5v3` | `next@16.1.6` | Triaged | Next.js Server Components DoS advisories; app deployed behind private VPC security group in demo. |
+| `CVE-2026-44573` .. `CVE-2026-94483` | `next@16.1.6` | Triaged | Framework-level advisories in Next.js 16.1.6; non-exploitable under isolated single-tenant architecture. |
+| `CVE-2026-102276` / `CVE-2026-102278` | `brace-expansion` | Triaged | ReDoS during regex expansion; no untrusted user input passed to glob/brace patterns. |
+| `CVE-2026-109383` / `CVE-2026-19534` | `undici@6.28.0` | Remediated & Triaged | Stripped `npm` from production runner; no outbound SSRF / WebSocket vectors in OnYx. |
 
 ---
 
