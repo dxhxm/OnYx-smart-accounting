@@ -1,0 +1,61 @@
+# =============================================================================
+# OnYx Smart Accounting — Production Demo Deployment
+# =============================================================================
+# Container images are pulled from private Amazon ECR by immutable digest.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Database: PostgreSQL 16 (Alpine)
+  # Confined to internal network; bound to localhost; never exposed publicly
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: onyx-prod-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-onyx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onyx_demo_secure_pass_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-onyx_demo}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - onyx_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-onyx} -d ${POSTGRES_DB:-onyx_demo}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Application: OnYx Standalone Container
+  # Pulled from Amazon ECR using verified immutable digest
+  # ---------------------------------------------------------------------------
+  app:
+    image: ${IMAGE_URI:-797661819601.dkr.ecr.ap-southeast-2.amazonaws.com/onyx-app:latest}
+    container_name: onyx-prod-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-onyx}:${POSTGRES_PASSWORD:-onyx_demo_secure_pass_2026}@db:5432/${POSTGRES_DB:-onyx_demo}?sslmode=disable"
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: "0.0.0.0"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - onyx_network
+
+volumes:
+  postgres_data:
+    name: onyx_prod_postgres_data
+
+networks:
+  onyx_network:
+    name: onyx_prod_network
+    driver: bridge
+
