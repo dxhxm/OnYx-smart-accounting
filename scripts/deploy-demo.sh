@@ -36,10 +36,12 @@ if [[ -f "${STATE_FILE}" ]]; then
   echo "ℹ️ Recorded previous active image: ${PREVIOUS_IMAGE}"
 fi
 
-# 2. Authenticate to Amazon ECR using EC2 Instance Profile credentials
-echo "🔑 Authenticating to Amazon ECR in ${AWS_REGION}..."
-REGISTRY_HOST=$(echo "${TARGET_IMAGE}" | cut -d/ -f1)
-aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY_HOST}"
+# 2. Authenticate to Amazon ECR using EC2 Instance Profile credentials if using ECR
+if [[ "${TARGET_IMAGE}" == *".dkr.ecr."* ]]; then
+  echo "🔑 Authenticating to Amazon ECR in ${AWS_REGION}..."
+  REGISTRY_HOST=$(echo "${TARGET_IMAGE}" | cut -d/ -f1)
+  aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY_HOST}"
+fi
 
 # 3. Pull target image
 echo "📦 Pulling target image: ${TARGET_IMAGE}..."
