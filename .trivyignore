@@ -13,3 +13,10 @@ GHSA-2xp9-vwfh-vxw4
 # Experimental 'use cache' typed array advisory (feature not used in codebase)
 GHSA-673q-mjm6-r5xr
 
+# Upstream Node.js base image bundled HTTP client (undici)
+# Justification: Non-exploitable in OnYx; internal accounting system has no SSRF or user-controlled outbound HTTP request vectors.
+CVE-2026-109383
+CVE-2026-109869
+CVE-2026-87018
+
+

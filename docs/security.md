@@ -68,6 +68,9 @@ In a mature DevSecOps pipeline, false positives and non-exploitable findings are
 | `GHSA-2464-fhr4-w9xw` | `next@16.1.6` | Triaged | Next.js Image Optimization SVG parsing. No public SVG image upload vector active in demo. |
 | `GHSA-2xp9-vwfh-vxw4` | `next@16.1.6` | Triaged | Next.js Image Optimization AVIF parsing. |
 | `GHSA-673q-mjm6-r5xr` | `next@16.1.6` | Triaged | Pertains to experimental `use cache` returning typed arrays; unused in codebase. |
+| `CVE-2026-109383` | `undici@6.28.0` | Remediated & Triaged | Stripped `npm` and bundled `undici` from production runner; no outbound SSRF vector in OnYx. |
+| `CVE-2026-109869` | `undici@6.28.0` | Remediated & Triaged | Stripped `npm` and bundled `undici` from production runner; no outbound SSRF vector in OnYx. |
+| `CVE-2026-87018` | `undici@6.28.0` | Remediated & Triaged | Stripped `npm` and bundled `undici` from production runner; no outbound SSRF vector in OnYx. |
 
 ---
 

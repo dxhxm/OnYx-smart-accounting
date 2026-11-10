@@ -46,8 +46,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Install curl for HEALTHCHECK and openssl for Prisma
-RUN apk add --no-cache curl openssl
+# Install curl for HEALTHCHECK and openssl for Prisma; strip npm/npx to reduce attack surface
+RUN apk add --no-cache curl openssl && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Security: Create and run as an unprivileged, non-root user
 RUN addgroup --system --gid 1001 nodejs && \
