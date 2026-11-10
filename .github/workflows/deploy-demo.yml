@@ -1,0 +1,228 @@
+name: CD — Automated Deployment to EC2
+
+on:
+  workflow_run:
+    workflows: ["Release — Image Build, Security Scan & ECR Publish"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      image_tag_or_digest:
+        description: "Image tag or digest to deploy (e.g. latest, sha-<commit>, or sha256:...)"
+        required: false
+        default: "latest"
+
+permissions:
+  contents: read
+
+# Avoid concurrent deployments to the single demo instance
+concurrency:
+  group: deploy-demo-server
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Image to EC2 Demo Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # When triggered by workflow_run, only run if the release workflow succeeded
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Step 1 - Resolve Target Image Digest
+        id: resolve-image
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          ECR_REPO: ${{ vars.ECR_REPOSITORY }}
+        run: |
+          # Determine the target tag
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TARGET_TAG="${{ inputs.image_tag_or_digest }}"
+          else
+            TARGET_TAG="sha-${{ github.event.workflow_run.head_sha }}"
+            # Fallback if sha-<sha> tag is 7 chars
+            SHORT_SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+            if ! aws ecr describe-images --repository-name "${ECR_REPO}" --image-ids imageTag="${TARGET_TAG}" --region "${AWS_REGION}" >/dev/null 2>&1; then
+              TARGET_TAG="sha-${SHORT_SHA}"
+            fi
+          fi
+
+          echo "Target Tag / Reference: ${TARGET_TAG}"
+
+          # Query ECR for registry host and image details
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+          # If the user passed an exact digest (sha256:...)
+          if [[ "${TARGET_TAG}" == sha256:* ]]; then
+            DIGEST="${TARGET_TAG}"
+          else
+            DIGEST=$(aws ecr describe-images \
+              --repository-name "${ECR_REPO}" \
+              --image-ids imageTag="${TARGET_TAG}" \
+              --region "${AWS_REGION}" \
+              --query 'imageDetails[0].imageDigest' \
+              --output text)
+          fi
+
+          if [ -z "${DIGEST}" ] || [ "${DIGEST}" = "None" ]; then
+            echo "::error::Could not resolve image digest from ECR for tag ${TARGET_TAG}"
+            exit 1
+          fi
+
+          PINNED_IMAGE_URI="${REGISTRY}/${ECR_REPO}@${DIGEST}"
+          echo "Resolved Pinned Image URI: ${PINNED_IMAGE_URI}"
+
+          echo "image_uri=${PINNED_IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "image_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "registry=${REGISTRY}" >> "$GITHUB_OUTPUT"
+
+      - name: Step 2 - Fetch Instance Public IP
+        id: instance-info
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          PUBLIC_IP=$(aws ec2 describe-instances \
+            --instance-ids "${INSTANCE_ID}" \
+            --region "${AWS_REGION}" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+
+          if [ -z "${PUBLIC_IP}" ] || [ "${PUBLIC_IP}" = "None" ]; then
+            echo "::error::Could not retrieve Public IP for instance ${INSTANCE_ID}"
+            exit 1
+          fi
+
+          echo "Instance Public IP: ${PUBLIC_IP}"
+          echo "public_ip=${PUBLIC_IP}" >> "$GITHUB_OUTPUT"
+
+      - name: Step 3 - Sync Deployment Assets & Execute via AWS Systems Manager
+        id: execute-deployment
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          IMAGE_URI: ${{ steps.resolve-image.outputs.image_uri }}
+        run: |
+          echo "Preparing deployment assets payload..."
+          COMPOSE_B64=$(base64 -i compose.prod.yml | tr -d '\n')
+          DEPLOY_SCRIPT_B64=$(base64 -i scripts/deploy-demo.sh | tr -d '\n')
+
+          echo "Sending deployment command to instance ${INSTANCE_ID} via AWS SSM..."
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${INSTANCE_ID}" \
+            --document-name "AWS-RunShellScript" \
+            --comment "OnYx CD Deployment for ${IMAGE_URI}" \
+            --parameters commands="[
+              \"mkdir -p /opt/onyx/scripts\",
+              \"echo '${COMPOSE_B64}' | base64 -d > /opt/onyx/compose.prod.yml\",
+              \"echo '${DEPLOY_SCRIPT_B64}' | base64 -d > /opt/onyx/scripts/deploy-demo.sh\",
+              \"chmod +x /opt/onyx/scripts/deploy-demo.sh\",
+              \"/opt/onyx/scripts/deploy-demo.sh '${IMAGE_URI}'\"
+            ]" \
+            --region "${AWS_REGION}" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command dispatched! Command ID: ${COMMAND_ID}"
+          echo "command_id=${COMMAND_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Step 4 - Monitor Deployment Progress
+        env:
+          COMMAND_ID: ${{ steps.execute-deployment.outputs.command_id }}
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          echo "Monitoring SSM execution ${COMMAND_ID} on instance ${INSTANCE_ID}..."
+          STATUS="InProgress"
+          ATTEMPTS=0
+          MAX_ATTEMPTS=40 # Up to 200 seconds
+
+          while [ "$STATUS" = "InProgress" ] || [ "$STATUS" = "Pending" ] || [ "$STATUS" = "Delayed" ]; do
+            ATTEMPTS=$((ATTEMPTS + 1))
+            if [ $ATTEMPTS -gt $MAX_ATTEMPTS ]; then
+              echo "::error::SSM Command timed out waiting for completion"
+              exit 1
+            fi
+
+            sleep 5
+            INVOCATION=$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" \
+              --instance-id "${INSTANCE_ID}" \
+              --region "${AWS_REGION}" \
+              --output json)
+
+            STATUS=$(echo "$INVOCATION" | jq -r '.Status')
+            echo "SSM Execution Status: ${STATUS} (poll ${ATTEMPTS}/${MAX_ATTEMPTS})"
+          done
+
+          echo "==================== REMOTE HOST OUTPUT ===================="
+          echo "$INVOCATION" | jq -r '.StandardOutputContent'
+          echo "============================================================"
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error::SSM deployment command failed with status: ${STATUS}"
+            echo "==================== REMOTE ERROR OUTPUT ===================="
+            echo "$INVOCATION" | jq -r '.StandardErrorContent'
+            echo "============================================================"
+            exit 1
+          fi
+
+          echo "Deployment command completed successfully on host!"
+
+      - name: Step 5 - External Health Verification Gate (Smoke Test)
+        env:
+          PUBLIC_IP: ${{ steps.instance-info.outputs.public_ip }}
+        run: |
+          echo "Verifying public accessibility from GitHub Actions runner..."
+          TARGET_URL="http://${PUBLIC_IP}:3000"
+          echo "Target URL: ${TARGET_URL}"
+
+          for i in {1..10}; do
+            RESPONSE=$(curl -s -f -m 5 "${TARGET_URL}/api/health" 2>/dev/null || true)
+            if echo "$RESPONSE" | grep -q '"status":"ok"'; then
+              echo "✅ Public health check PASSED on attempt ${i}: ${RESPONSE}"
+              exit 0
+            fi
+            echo "Waiting for public health endpoint (attempt ${i}/10)..."
+            sleep 3
+          done
+
+          echo "::error::Public health check failed against ${TARGET_URL}/api/health"
+          exit 1
+
+      - name: Step 6 - Generate Deployment Step Summary
+        if: always()
+        env:
+          IMAGE_URI: ${{ steps.resolve-image.outputs.image_uri }}
+          IMAGE_DIGEST: ${{ steps.resolve-image.outputs.image_digest }}
+          PUBLIC_IP: ${{ steps.instance-info.outputs.public_ip }}
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+        run: |
+          APP_URL="http://${PUBLIC_IP}:3000"
+
+          echo "### 🌐 Production Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Server** | \`${INSTANCE_ID}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Public IPv4** | \`${PUBLIC_IP}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Direct Application URL** | [${APP_URL}](${APP_URL}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Pinned Image Digest** | \`${IMAGE_DIGEST}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Full Deployment URI** | \`${IMAGE_URI}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Rollout Status** | ${{ job.status == 'success' && '✅ SUCCESSFUL' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔒 **Zero SSH Policy:** Deployment executed entirely via AWS Systems Manager Run Command." >> $GITHUB_STEP_SUMMARY
+          echo "🩺 **External Smoke Test:** Public \`/api/health\` endpoint validated through Security Group." >> $GITHUB_STEP_SUMMARY
+

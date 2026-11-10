@@ -82,7 +82,8 @@ data "aws_iam_policy_document" "cicd_ssm" {
       "ssm:GetCommandInvocation",
       "ssm:ListCommandInvocations",
       "ssm:ListCommands",
-      "ssm:DescribeInstanceInformation"
+      "ssm:DescribeInstanceInformation",
+      "ec2:DescribeInstances"
     ]
     resources = ["*"]
   }
