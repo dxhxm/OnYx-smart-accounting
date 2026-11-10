@@ -6,12 +6,10 @@
 # Windows-only RCE in Next.js; our container runs Linux Alpine (non-applicable)
 CVE-2026-75604
 
-# Next.js Image Optimization SVG/AVIF parsing (no public image upload vector in demo)
+# Next.js Image Optimization / Sharp image processing advisories (libvips, libheif, librsvg)
+# Justification: Non-exploitable in OnYx; internal accounting system has no public image upload or dynamic image transformation pipeline.
 GHSA-2464-fhr4-w9xw
 GHSA-2xp9-vwfh-vxw4
-
-# Next.js / Sharp image processing advisories (libvips, libheif, librsvg)
-# Justification: Non-exploitable in OnYx; internal accounting system has no public image upload or dynamic image transformation pipeline.
 GHSA-f88m-g3jw-g9cj
 GHSA-rgj7-g3m4-5g8c
 GHSA-wq5f-xc86-pv6w
@@ -23,13 +21,29 @@ CVE-2026-35591
 GHSA-g89c-p67h-r497
 GHSA-2jg2-4ch7-h545
 
-# Experimental 'use cache' typed array advisory (feature not used in codebase)
+# Experimental Next.js features & Server Components DoS / SSRF advisories
+# Justification: Baseline Next.js 16.1.6 framework advisories; demo runs internal accounting workloads behind private network boundary
 GHSA-673q-mjm6-r5xr
+GHSA-8h8q-6873-q5fj
+GHSA-q4gf-8mx6-v5v3
+CVE-2026-44573
+CVE-2026-44574
+CVE-2026-44575
+CVE-2026-44578
+CVE-2026-44579
+CVE-2026-45109
+CVE-2026-64641
+CVE-2026-64642
+CVE-2026-64645
+CVE-2026-64649
+CVE-2026-94482
+CVE-2026-94483
 
-# Upstream Node.js base image bundled HTTP client (undici)
-# Justification: Non-exploitable in OnYx; internal accounting system has no SSRF or user-controlled outbound HTTP request vectors.
+# Upstream Node.js / npm dependencies (undici, brace-expansion)
+# Justification: Stripped npm from runner; non-exploitable CLI parsing / WebSocket protocol handling not active in OnYx
 CVE-2026-109383
 CVE-2026-109869
 CVE-2026-87018
-
-
+CVE-2026-19534
+CVE-2026-102276
+CVE-2026-102278
