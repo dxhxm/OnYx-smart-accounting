@@ -11,6 +11,7 @@ on:
       - "package*.json"
       - "Dockerfile"
       - ".dockerignore"
+      - ".trivyignore"
       - "next.config.ts"
       - ".github/workflows/image-publish.yml"
   workflow_dispatch:
