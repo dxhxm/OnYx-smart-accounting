@@ -1,0 +1,54 @@
+name: Terraform IaC Quality Gates
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-ci.yml"
+    branches:
+      - main
+  push:
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-ci.yml"
+    branches:
+      - main
+
+# Least privilege: IaC quality gate only needs read access to repository contents
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform-validate:
+    name: Terraform Format & Validation Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.0"
+
+      - name: Terraform Format Check (fmt -check)
+        run: terraform fmt -check -recursive infra/
+
+      - name: Initialize & Validate Bootstrap Configuration (Offline)
+        run: |
+          cd infra/bootstrap
+          terraform init -backend=false
+          terraform validate
+
+      - name: Initialize & Validate Primary Infrastructure Configuration (Offline)
+        run: |
+          cd infra/terraform
+          terraform init -backend=false
+          terraform validate
+
