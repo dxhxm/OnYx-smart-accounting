@@ -1,0 +1,13 @@
+# =============================================================================
+# Gitleaks Configuration
+# Defines secret detection rules and allowlists for OnYx DevSecOps pipeline
+# =============================================================================
+
+[allowlist]
+description = "Allowlist for synthetic documentation examples and sample configs"
+paths = [
+  '''.agents/skills/.*''',
+  '''\.env\.example''',
+  '''docs/.*'''
+]
+

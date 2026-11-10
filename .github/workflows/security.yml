@@ -1,0 +1,44 @@
+name: DevSecOps Security Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  schedule:
+    # Run a scheduled scan every Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+
+# Least privilege: Security workflows only need read access to repository contents
+permissions:
+  contents: read
+
+# Automatically cancel out-of-date runs when new commits are pushed
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # 1. Secret Leak Detection (Gitleaks)
+  # Scans repository history and pull request commits for exposed credentials
+  # ===========================================================================
+  gitleaks:
+    name: Secret Leak Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks Secret Scanner
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
