@@ -124,7 +124,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${INSTANCE_ID}" \
             --document-name "AWS-RunShellScript" \
-            --comment "OnYx CD Deployment for ${IMAGE_URI}" \
+            --comment "OnYx CD Deployment" \
             --parameters commands="[
               \"mkdir -p /opt/onyx/scripts\",
               \"echo '${COMPOSE_B64}' | base64 -d > /opt/onyx/compose.prod.yml\",
