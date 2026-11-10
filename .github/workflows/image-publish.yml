@@ -1,0 +1,178 @@
+name: Release — Image Build, Security Scan & ECR Publish
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "prisma/**"
+      - "public/**"
+      - "package*.json"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "next.config.ts"
+      - ".github/workflows/image-publish.yml"
+  workflow_dispatch:
+    inputs:
+      force_publish:
+        description: "Force publish an image even if path filters did not match"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  security-events: write
+
+# Do not cancel release publishing mid-flight
+concurrency:
+  group: release-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-image:
+    name: Build, Scan & Publish Immutable ECR Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    outputs:
+      image_registry: ${{ steps.login-ecr.outputs.registry }}
+      image_repository: ${{ vars.ECR_REPOSITORY }}
+      image_tag_sha: ${{ github.sha }}
+      image_digest: ${{ steps.capture-digest.outputs.image_digest }}
+      image_uri: ${{ steps.capture-digest.outputs.image_uri }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up short SHA and metadata
+        id: meta
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to Amazon Private ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # =========================================================================
+      # 1. Build and load container image locally for security verification
+      # =========================================================================
+      - name: Build container image locally
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          tags: onyx-release:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # =========================================================================
+      # 2. Release Security Gate: Pre-publish Vulnerability Scan (Trivy)
+      # Policy: MUST block release on unignored HIGH or CRITICAL vulnerabilities
+      # =========================================================================
+      - name: Scan Image for High / Critical Vulnerabilities (Trivy Gate)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "onyx-release:scan"
+          format: "table"
+          exit-code: 1
+          ignore-unfixed: false
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+          trivyignores: ".trivyignore"
+
+      # =========================================================================
+      # 3. Generate Software Bill of Materials (SBOM) Artifact
+      # =========================================================================
+      - name: Generate CycloneDX SBOM
+        uses: aquasecurity/trivy-action@master
+        if: always()
+        with:
+          image-ref: "onyx-release:scan"
+          format: "cyclonedx"
+          output: "onyx-sbom.cdx.json"
+
+      - name: Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: onyx-sbom-${{ steps.meta.outputs.short_sha }}
+          path: onyx-sbom.cdx.json
+          retention-days: 14
+
+      # =========================================================================
+      # 4. Tag and Push Scanned, Verifiable Artifacts to Amazon ECR
+      # =========================================================================
+      - name: Tag and Push Image to Private ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPO: ${{ vars.ECR_REPOSITORY }}
+          SHA_TAG: ${{ github.sha }}
+          SHORT_TAG: sha-${{ steps.meta.outputs.short_sha }}
+        run: |
+          echo "Tagging image for ECR registry: ${REGISTRY}/${REPO}"
+          docker tag onyx-release:scan "${REGISTRY}/${REPO}:${SHA_TAG}"
+          docker tag onyx-release:scan "${REGISTRY}/${REPO}:${SHORT_TAG}"
+          docker tag onyx-release:scan "${REGISTRY}/${REPO}:latest"
+
+          echo "Pushing immutable SHA tags and latest pointer..."
+          docker push "${REGISTRY}/${REPO}:${SHA_TAG}"
+          docker push "${REGISTRY}/${REPO}:${SHORT_TAG}"
+          docker push "${REGISTRY}/${REPO}:latest"
+
+      # =========================================================================
+      # 5. Capture Authoritative Image Digest from Amazon ECR
+      # =========================================================================
+      - name: Capture Authoritative Image Digest from ECR
+        id: capture-digest
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPO: ${{ vars.ECR_REPOSITORY }}
+          SHA_TAG: ${{ github.sha }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          echo "Querying Amazon ECR API for authoritative image digest..."
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "${REPO}" \
+            --image-ids imageTag="${SHA_TAG}" \
+            --region "${AWS_REGION}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+
+          if [ -z "$DIGEST" ] || [ "$DIGEST" = "None" ]; then
+            echo "::error::Failed to retrieve authoritative image digest from ECR"
+            exit 1
+          fi
+
+          IMAGE_URI="${REGISTRY}/${REPO}@${DIGEST}"
+
+          echo "image_digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+          echo "### 🚀 Release Artifact Published to Amazon ECR" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Registry** | \`${REGISTRY}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Repository** | \`${REPO}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Git Commit** | [\`${SHA_TAG}\`](https://github.com/${{ github.repository }}/commit/${SHA_TAG}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag (Short)** | \`sha-${{ steps.meta.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Authoritative Digest** | \`${DIGEST}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployment URI** | \`${IMAGE_URI}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Trivy Vulnerability Scan Gate:** PASSED (zero unignored CRITICAL/HIGH vulnerabilities)" >> $GITHUB_STEP_SUMMARY
+          echo "📦 **Software Bill of Materials (SBOM):** Attached as workflow artifact" >> $GITHUB_STEP_SUMMARY
+
