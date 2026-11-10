@@ -1,0 +1,103 @@
+name: AWS Authentication & Permission Verification
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/aws-verify.yml"
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-aws-auth:
+    name: Verify AWS CI/CD Credentials & Scoped Boundaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Step 1 - Verify Caller Identity (STS)
+        run: |
+          echo "Verifying authenticated IAM principal..."
+          IDENTITY=$(aws sts get-caller-identity --output json)
+          echo "$IDENTITY"
+
+          ACCOUNT=$(echo "$IDENTITY" | jq -r '.Account')
+          ARN=$(echo "$IDENTITY" | jq -r '.Arn')
+
+          if [ "$ACCOUNT" != "797661819601" ]; then
+            echo "::error::Unexpected AWS Account ID: $ACCOUNT"
+            exit 1
+          fi
+
+          if [[ "$ARN" != *"onyx-github-actions-deployer"* ]]; then
+            echo "::error::Unexpected IAM identity: $ARN"
+            exit 1
+          fi
+
+          echo "Successfully authenticated as $ARN in account $ACCOUNT"
+
+      - name: Step 2 - Verify Scoped ECR Access
+        run: |
+          echo "Verifying ECR repository query permissions..."
+          aws ecr describe-repositories --repository-names ${{ vars.ECR_REPOSITORY }} --region ${{ vars.AWS_REGION }}
+
+          echo "Verifying ECR Docker login token retrieval..."
+          LOGIN_PASSWORD=$(aws ecr get-login-password --region ${{ vars.AWS_REGION }})
+          if [ -z "$LOGIN_PASSWORD" ]; then
+            echo "::error::Failed to retrieve ECR login token"
+            exit 1
+          fi
+          echo "ECR login token successfully retrieved"
+
+      - name: Step 3 - Verify Scoped SSM Instance Access
+        run: |
+          echo "Verifying SSM connectivity to demo host ${{ vars.EC2_INSTANCE_ID }}..."
+          SSM_INFO=$(aws ssm describe-instance-information \
+            --filters "Key=InstanceIds,Values=${{ vars.EC2_INSTANCE_ID }}" \
+            --region ${{ vars.AWS_REGION }} --output json)
+          echo "$SSM_INFO"
+
+          PING_STATUS=$(echo "$SSM_INFO" | jq -r '.InstanceInformationList[0].PingStatus')
+          echo "EC2 SSM PingStatus: $PING_STATUS"
+
+          if [ "$PING_STATUS" != "Online" ]; then
+            echo "::warning::SSM agent PingStatus is not Online yet ($PING_STATUS)"
+          fi
+
+      - name: Step 4 - Verify Least-Privilege Denials (DevSecOps Policy Enforcement Drill)
+        run: |
+          echo "Testing that CI/CD credentials CANNOT access unauthorized AWS services..."
+          
+          # Drill 1: S3 bucket listing should be denied
+          if aws s3 ls 2>&1 | grep -i "AccessDenied"; then
+            echo "PASS: S3 access properly denied (Least Privilege enforced)"
+          else
+            echo "::error::Security breach: S3 operation was not denied"
+            exit 1
+          fi
+
+          # Drill 2: IAM user creation should be denied
+          if aws iam create-user --user-name rogue-test-user 2>&1 | grep -i "AccessDenied"; then
+            echo "PASS: IAM privilege escalation properly denied"
+          else
+            echo "::error::Security breach: IAM user creation was not denied"
+            exit 1
+          fi
+
