@@ -49,41 +49,41 @@ resource "aws_instance" "demo_server" {
   # Automated Cloud-Init User Data:
   # Installs Docker, Compose, configures log rotation, and prepares directories
   user_data = <<-EOF
-              #!/usr/bin/env bash
-              set -euo pipefail
+#!/usr/bin/env bash
+set -euo pipefail
 
-              # 1. Update OS packages and install Docker
-              dnf update -y
-              dnf install -y docker git
+# 1. Update OS packages and install Docker
+dnf update -y
+dnf install -y docker git
 
-              # 2. Configure Docker daemon with log rotation (prevent disk fill)
-              mkdir -p /etc/docker
-              cat <<'JSON' > /etc/docker/daemon.json
-              {
-                "log-driver": "json-file",
-                "log-opts": {
-                  "max-size": "10m",
-                  "max-file": "3"
-                }
-              }
+# 2. Configure Docker daemon with log rotation (prevent disk fill)
+mkdir -p /etc/docker
+cat <<'JSON' > /etc/docker/daemon.json
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
 JSON
 
-              # 3. Start and enable Docker engine
-              systemctl enable --now docker
-              usermod -aG docker ec2-user
+# 3. Start and enable Docker engine
+systemctl enable --now docker
+usermod -aG docker ec2-user
 
-              # 4. Install Docker Compose plugin (v2)
-              DOCKER_CONFIG=/usr/local/lib/docker/cli-plugins
-              mkdir -p "$DOCKER_CONFIG"
-              curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o "$DOCKER_CONFIG/docker-compose"
-              chmod +x "$DOCKER_CONFIG/docker-compose"
+# 4. Install Docker Compose plugin (v2)
+DOCKER_CONFIG=/usr/local/lib/docker/cli-plugins
+mkdir -p "$DOCKER_CONFIG"
+curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 -o "$DOCKER_CONFIG/docker-compose"
+chmod +x "$DOCKER_CONFIG/docker-compose"
 
-              # 5. Prepare application directory for deployment
-              mkdir -p /opt/onyx
-              chown -R ec2-user:ec2-user /opt/onyx
+# 5. Prepare application directory for deployment
+mkdir -p /opt/onyx
+chown -R ec2-user:ec2-user /opt/onyx
 
-              echo "OnYx EC2 Bootstrap completed successfully at $(date)" >> /var/log/onyx-bootstrap.log
-              EOF
+echo "OnYx EC2 Bootstrap completed successfully at $(date)" >> /var/log/onyx-bootstrap.log
+EOF
 
   tags = {
     Name = "${var.project_name}-${var.environment}-server"
