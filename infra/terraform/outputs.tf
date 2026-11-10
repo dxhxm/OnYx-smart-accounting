@@ -37,3 +37,21 @@ output "ssm_connect_command" {
   description = "AWS CLI command to start an encrypted interactive session via SSM (Zero SSH)"
   value       = "aws ssm start-session --target ${aws_instance.demo_server.id} --region ${var.aws_region}"
 }
+
+output "cicd_iam_user_name" {
+  description = "The name of the dedicated CI/CD IAM service user"
+  value       = aws_iam_user.cicd.name
+}
+
+output "cicd_access_key_id" {
+  description = "The Access Key ID for GitHub Actions CI/CD"
+  value       = aws_iam_access_key.cicd.id
+  sensitive   = true
+}
+
+output "cicd_secret_access_key" {
+  description = "The Secret Access Key for GitHub Actions CI/CD"
+  value       = aws_iam_access_key.cicd.secret
+  sensitive   = true
+}
+
