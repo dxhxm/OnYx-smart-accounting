@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-onyx}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-onyx_demo_secure_pass_2026}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-onyx_demo}
     ports:
       - "127.0.0.1:5432:5432"
@@ -40,7 +40,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-onyx}:${POSTGRES_PASSWORD:-onyx_demo_secure_pass_2026}@db:5432/${POSTGRES_DB:-onyx_demo}?sslmode=disable"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-onyx}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-onyx_demo}?sslmode=disable}
       NODE_ENV: production
       PORT: 3000
       HOSTNAME: "0.0.0.0"

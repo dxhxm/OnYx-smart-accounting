@@ -51,8 +51,16 @@ docker pull "${TARGET_IMAGE}"
 echo "🔄 Rolling out new container version..."
 export IMAGE_URI="${TARGET_IMAGE}"
 
-# Write runtime environment configuration
-echo "IMAGE_URI=${TARGET_IMAGE}" > "${DEPLOY_DIR}/.env"
+# Update or append IMAGE_URI in runtime environment configuration (.env)
+if [[ -f "${DEPLOY_DIR}/.env" ]]; then
+  if grep -q '^IMAGE_URI=' "${DEPLOY_DIR}/.env"; then
+    sed -i "s|^IMAGE_URI=.*|IMAGE_URI=${TARGET_IMAGE}|" "${DEPLOY_DIR}/.env"
+  else
+    echo "IMAGE_URI=${TARGET_IMAGE}" >> "${DEPLOY_DIR}/.env"
+  fi
+else
+  echo "IMAGE_URI=${TARGET_IMAGE}" > "${DEPLOY_DIR}/.env"
+fi
 
 docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 
@@ -96,7 +104,11 @@ echo "⚠️ Initiating automated rollback to previous known-good image..."
 if [[ -n "${PREVIOUS_IMAGE}" && "${PREVIOUS_IMAGE}" != "${TARGET_IMAGE}" ]]; then
   echo "⏪ Reverting to previous image: ${PREVIOUS_IMAGE}"
   export IMAGE_URI="${PREVIOUS_IMAGE}"
-  echo "IMAGE_URI=${PREVIOUS_IMAGE}" > "${DEPLOY_DIR}/.env"
+  if [[ -f "${DEPLOY_DIR}/.env" ]]; then
+    sed -i "s|^IMAGE_URI=.*|IMAGE_URI=${PREVIOUS_IMAGE}|" "${DEPLOY_DIR}/.env"
+  else
+    echo "IMAGE_URI=${PREVIOUS_IMAGE}" > "${DEPLOY_DIR}/.env"
+  fi
   docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans
 
   echo "🩺 Verifying rollback health..."
