@@ -1,0 +1,58 @@
+# =============================================================================
+# OnYx Observability Stack — Exporters (Node Exporter & cAdvisor)
+# =============================================================================
+# Collects host OS hardware metrics and granular Docker container statistics.
+# All metrics ports are bound exclusively to 127.0.0.1 and internal Docker network.
+# =============================================================================
+
+name: onyx-monitoring
+
+services:
+  # ---------------------------------------------------------------------------
+  # Node Exporter: Host Hardware and OS Kernel Metrics
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.8.2
+    container_name: onyx-node-exporter
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host/root'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro,rslave
+    ports:
+      # Bound strictly to localhost; never exposed to internet
+      - "127.0.0.1:9100:9100"
+    networks:
+      - onyx_network
+
+  # ---------------------------------------------------------------------------
+  # cAdvisor: Container-level Resource and Performance Metrics
+  # ---------------------------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: onyx-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/kmsg:/dev/kmsg
+    ports:
+      # Bound strictly to localhost; never exposed to internet
+      - "127.0.0.1:8080:8080"
+    networks:
+      - onyx_network
+
+networks:
+  onyx_network:
+    name: onyx_prod_network
+    external: true
