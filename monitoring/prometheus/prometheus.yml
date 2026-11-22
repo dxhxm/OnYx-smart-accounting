@@ -2,6 +2,7 @@
 # OnYx Prometheus Configuration
 # =============================================================================
 # Scrapes metrics from Node Exporter, cAdvisor, and Prometheus TSDB engine.
+# Streams metrics to Grafana Cloud via authenticated remote_write.
 # =============================================================================
 
 global:
@@ -14,6 +15,15 @@ global:
     environment: 'demo'
     project: 'onyx-smart-accounting'
     region: 'ap-southeast-2'
+
+# -----------------------------------------------------------------------------
+# Grafana Cloud Remote Write (Outbound telemetry push)
+# -----------------------------------------------------------------------------
+remote_write:
+  - url: https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/prom/push
+    basic_auth:
+      username: '3793866'
+      password_file: '/etc/prometheus/grafana_token'
 
 # Scrape job definitions
 scrape_configs:

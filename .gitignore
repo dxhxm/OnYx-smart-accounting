@@ -185,3 +185,7 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+
+# Monitoring secrets
+grafana_token
+*token.txt

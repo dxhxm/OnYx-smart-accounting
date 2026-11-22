@@ -2,6 +2,7 @@
 # OnYx Observability Stack — Exporters & Prometheus TSDB
 # =============================================================================
 # Collects host OS hardware metrics, Docker container stats, and Prometheus TSDB.
+# Streams telemetry outbound to Grafana Cloud.
 # All metrics ports are bound exclusively to 127.0.0.1 and internal Docker network.
 # =============================================================================
 
@@ -67,6 +68,7 @@ services:
       - --web.enable-lifecycle
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./grafana_token:/etc/prometheus/grafana_token:ro
       - prometheus_data:/prometheus
     ports:
       # Bound strictly to localhost; never exposed to internet
