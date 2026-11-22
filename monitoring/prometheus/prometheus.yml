@@ -1,7 +1,7 @@
 # =============================================================================
 # OnYx Prometheus Configuration
 # =============================================================================
-# Scrapes metrics from Node Exporter, cAdvisor, and Prometheus TSDB engine.
+# Scrapes metrics from Node Exporter, cAdvisor, Prometheus, and OnYx App.
 # Streams metrics to Grafana Cloud via authenticated remote_write.
 # =============================================================================
 
@@ -47,3 +47,11 @@ scrape_configs:
   - job_name: 'cadvisor'
     static_configs:
       - targets: ['cadvisor:8080']
+
+  # ---------------------------------------------------------------------------
+  # 4. OnYx Next.js Application Telemetry (RED Metrics)
+  # ---------------------------------------------------------------------------
+  - job_name: 'onyx-app'
+    metrics_path: '/api/metrics'
+    static_configs:
+      - targets: ['app:3000']
