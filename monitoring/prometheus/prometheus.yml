@@ -1,0 +1,39 @@
+# =============================================================================
+# OnYx Prometheus Configuration
+# =============================================================================
+# Scrapes metrics from Node Exporter, cAdvisor, and Prometheus TSDB engine.
+# =============================================================================
+
+global:
+  scrape_interval: 15s      # Scrape targets every 15 seconds
+  evaluation_interval: 15s  # Evaluate alert rules every 15 seconds
+  scrape_timeout: 10s       # Timeout if target doesn't respond in 10s
+
+  # Attach these default labels to all time-series collected
+  external_labels:
+    environment: 'demo'
+    project: 'onyx-smart-accounting'
+    region: 'ap-southeast-2'
+
+# Scrape job definitions
+scrape_configs:
+  # ---------------------------------------------------------------------------
+  # 1. Prometheus self-monitoring
+  # ---------------------------------------------------------------------------
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ---------------------------------------------------------------------------
+  # 2. Linux OS & Hardware metrics (Node Exporter)
+  # ---------------------------------------------------------------------------
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # ---------------------------------------------------------------------------
+  # 3. Docker Container metrics (cAdvisor)
+  # ---------------------------------------------------------------------------
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
