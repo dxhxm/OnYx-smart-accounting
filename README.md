@@ -4,6 +4,7 @@
 [![AWS](https://img.shields.io/badge/AWS-ap--southeast--2-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)](https://aws.amazon.com)
 [![DevSecOps](https://img.shields.io/badge/Security-Trivy_Gate_&_SBOM-blue?style=for-the-badge&logo=securityscorecard)](docs/security.md)
 [![Zero-SSH](https://img.shields.io/badge/Deploy-Zero--SSH_SSM-purple?style=for-the-badge&logo=amazonaws)](docs/architecture.md)
+[![Observability](https://img.shields.io/badge/Observability-Grafana_Cloud_&_Prometheus-F46800?style=for-the-badge&logo=grafana&logoColor=white)](docs/architecture.md#7-full-stack-observability-architecture-prometheus--grafana-cloud)
 
 OnYx is an AI-driven financial governance platform designed to streamline accounting workflows, enforce auditability, and deliver intelligent financial insights. 
 
@@ -15,6 +16,8 @@ In addition to its full-stack accounting capabilities, this repository demonstra
 
 * **Production URL:** [https://onyx-smart-accounting.app](https://onyx-smart-accounting.app)
 * **Health API Endpoint:** [https://onyx-smart-accounting.app/api/health](https://onyx-smart-accounting.app/api/health)
+* **Application Metrics Endpoint:** [https://onyx-smart-accounting.app/api/metrics](https://onyx-smart-accounting.app/api/metrics)
+* **Observability Platform:** Grafana Cloud (Hosted Prometheus TSDB & Alerting Engine)
 * **AWS Region:** Sydney (`ap-southeast-2`)
 * **Compute:** AWS EC2 `t3.small` (Amazon Linux 2023, Docker Engine, AWS SSM Agent)
 * **Edge Proxy:** Cloudflare (Anycast DNS, Universal SSL / TLS 1.3, DDoS protection)
@@ -88,6 +91,7 @@ flowchart TD
 4. **Supply Chain Integrity**: Generates a **CycloneDX Software Bill of Materials (SBOM)** on every publish; deployments reference immutable SHA-256 digests (`@sha256:...`) instead of mutable tags.
 5. **Least-Privilege CI/CD Credentials**: GitHub Actions authenticates through a narrowly scoped IAM user restricted strictly to pushing to `onyx-app` and executing SSM commands on `i-00d2233bfd6f65be2`. All other AWS services (S3, IAM) explicitly return `AccessDenied`.
 6. **Automated Self-Healing Rollback**: Post-deployment smoke tests check `/api/health`. If 15 consecutive probes fail, the deployment script autonomously restores the previous known-healthy container image digest in seconds.
+7. **Full-Stack Observability & SRE Alerting**: Prometheus scrapes host metrics (Node Exporter), container metrics (cAdvisor), and Next.js RED application telemetry (`prom-client`), streaming outbound to Grafana Cloud via authenticated `remote_write` with zero inbound ports exposed. Multi-tier alerting continuously evaluates host health, container availability, memory pressure, and 5xx error spikes.
 
 ---
 

@@ -196,3 +196,88 @@ df -h /
      * `onyx-cicd-ecr-push`: scoped exclusively to ECR repository `onyx-app`.
      * `onyx-cicd-ssm-deploy`: scoped exclusively to EC2 instance `i-00d2233bfd6f65be2`.
 
+---
+
+## 6. Observability & Monitoring Operations
+
+The observability stack runs as an independent Docker Compose project (`onyx-monitoring`) connected to `onyx_prod_network`.
+
+### Service Components
+* `onyx-node-exporter:v1.8.2`: Host hardware and Linux kernel metrics (Port `127.0.0.1:9100`).
+* `onyx-cadvisor:v0.49.1`: Per-container resource utilization (Port `127.0.0.1:8080`).
+* `onyx-prometheus:v2.54.1`: TSDB scraping targets every 15s; outbound `remote_write` to Grafana Cloud (Port `127.0.0.1:9090`).
+* `onyx-prod-app`: Next.js 16 instrumented with `prom-client` serving `/api/metrics` on port 3000.
+
+### Operational Procedures (via AWS SSM)
+
+#### 1. Check Scrape Target Health
+```bash
+INSTANCE_ID="i-00d2233bfd6f65be2"
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name "AWS-RunShellScript" \
+  --parameters 'commands=["curl -s http://localhost:9090/api/v1/targets | python3 -c \"import sys, json; [print(t[\x27labels\x27][\x27job\x27], t[\x27health\x27]) for t in json.load(sys.stdin)[\x27data\x27][\x27activeTargets\x27]]\""]' \
+  --region ap-southeast-2
+```
+
+#### 2. Reload Prometheus Configuration (Zero-Downtime)
+When updating `/opt/onyx/monitoring/prometheus/prometheus.yml`, trigger a config reload without restarting the container:
+```bash
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name "AWS-RunShellScript" \
+  --parameters 'commands=["curl -s -X POST http://localhost:9090/-/reload"]' \
+  --region ap-southeast-2
+```
+
+#### 3. Verify Remote Write Egress to Grafana Cloud
+Check Prometheus logs for outbound push confirmations:
+```bash
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name "AWS-RunShellScript" \
+  --parameters 'commands=["docker logs onyx-prometheus --tail 50 | grep -i -E \"remote_write|wal\""]' \
+  --region ap-southeast-2
+```
+
+---
+
+## 7. Incident Response & Alert Triage Runbook
+
+### Alert: `OnYx App Down` (Severity: Critical)
+* **Trigger:** `up{job="onyx-app"} < 1` for 2 minutes.
+* **Triage Steps:**
+  1. Check container status: `docker ps -a --filter name=onyx-prod-app`
+  2. Inspect crash logs: `docker logs onyx-prod-app --tail 100`
+  3. Verify port binding and internal health: `curl -v http://localhost:3000/api/health`
+  4. If container crashed after deployment, trigger rollback:
+     ```bash
+     /opt/onyx/scripts/deploy-demo.sh rollback
+     ```
+
+### Alert: `EC2 Host CPU High` (Severity: Warning)
+* **Trigger:** Host CPU usage `> 85%` for 5 minutes.
+* **Triage Steps:**
+  1. Inspect top processes by CPU: `docker stats --no-stream` and `top -b -n 1 | head -n 20`
+  2. Determine if traffic spike or rogue process: Check Dashboard 3 (RPS).
+  3. If traffic spike is malicious, engage Cloudflare Under Attack mode or enable rate-limiting rules.
+
+### Alert: `EC2 Host Memory High` (Severity: Warning)
+* **Trigger:** Available memory `< 15%` (Usage `> 85%`) for 5 minutes.
+* **Triage Steps:**
+  1. Check per-container memory: `docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}"`
+  2. Check V8 heap memory in Dashboard 3 (`onyx_nodejs_heap_size_used_bytes`). If growing monotonically without garbage collection, a Node.js memory leak is likely.
+  3. Perform a safe rolling restart: `docker compose -f /opt/onyx/compose.prod.yml restart app`
+
+### Alert: `OnYx HTTP 5xx Error Spike` (Severity: Critical)
+* **Trigger:** 5xx error rate `> 5%` for 3 minutes.
+* **Triage Steps:**
+  1. Inspect Caddy and App error logs:
+     ```bash
+     docker logs onyx-prod-app --tail 50 --since 10m | grep -i error
+     docker logs onyx-prod-caddy --tail 50 --since 10m
+     ```
+  2. Verify database connection pool: `docker exec onyx-prod-db pg_isready -U onyx_user -d onyx_db`
+  3. Inspect route breakdown panel in Dashboard 3 to isolate which specific endpoint is generating 500s.
+
+
